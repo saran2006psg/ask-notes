@@ -117,3 +117,38 @@ def process_documents():
     except Exception as e:
         logger.error(f"Error processing documents: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/ingest/chunk")
+def chunk_documents():
+    """
+    Trigger semantic chunking across all ingested documents.
+    """
+    try:
+        results = document_service.create_chunks()
+        success_count = sum(1 for r in results if r["status"] == "chunked")
+        failed_count = sum(1 for r in results if r["status"] == "failed")
+        
+        return {
+            "message": "Semantic chunking completed.",
+            "statistics": {
+                "total_documents": len(results),
+                "successfully_chunked": success_count,
+                "failed": failed_count
+            },
+            "details": results
+        }
+    except Exception as e:
+        logger.error(f"Error chunking documents: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/documents/chunks")
+def get_chunk_stats():
+    """
+    Get statistics about generated document chunks.
+    """
+    try:
+        return document_service.get_chunk_statistics()
+    except Exception as e:
+        logger.error(f"Error fetching chunk statistics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+

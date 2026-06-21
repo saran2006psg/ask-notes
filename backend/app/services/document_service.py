@@ -1,3 +1,4 @@
+import re
 import json
 import logging
 import time
@@ -271,4 +272,141 @@ def analyze_documents() -> Dict[str, Any]:
             logger.error(f"Error analyzing document at {json_path}: {e}")
             
     return analysis
+
+# Path for chunks storage
+CHUNKS_DIR = config.DATA_DIR / "chunks"
+
+def create_chunks() -> List[Dict[str, Any]]:
+    """
+    Load extracted JSON documents, run the SemanticChunker on each page,
+    attach metadata, save chunks to data/chunks/{subject}/, and return results.
+    """
+    from app.utils.semantic_chunker import SemanticChunker
+    
+    results = []
+    CHUNKS_DIR.mkdir(parents=True, exist_ok=True)
+    
+    if not config.EXTRACTED_DIR.exists():
+        logger.warning("Extracted documents directory does not exist.")
+        return results
+        
+    # Recursively find all JSON extracted files
+    json_files = list(config.EXTRACTED_DIR.glob("**/*.json"))
+    logger.info(f"Found {len(json_files)} extracted document JSON(s) to chunk.")
+    
+    chunker = SemanticChunker()
+    
+    for json_path in json_files:
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                doc_data = json.load(f)
+                
+            filename = doc_data.get("filename")
+            subject = doc_data.get("subject", "General")
+            fmt = doc_data.get("format", "UNKNOWN")
+            pages = doc_data.get("pages", [])
+            
+            doc_chunks = []
+            chunk_idx = 0
+            
+            # Clean filename for IDs (remove spaces and special chars)
+            clean_filename_id = Path(filename).stem.replace(" ", "_")
+            clean_filename_id = re.sub(r'[^\w\-]', '', clean_filename_id)
+            
+            for page in pages:
+                page_num = page.get("page_number", 1)
+                text = page.get("text", "").strip()
+                if not text:
+                    continue
+                    
+                # Split text semantically
+                page_chunks = chunker.chunk_text(text)
+                
+                for chunk_text in page_chunks:
+                    chunk_id = f"{subject}_{clean_filename_id}_chunk_{chunk_idx}"
+                    chunk_id = re.sub(r'[^\w\-]', '', chunk_id)
+                    
+                    doc_chunks.append({
+                        "chunk_id": chunk_id,
+                        "text": chunk_text,
+                        "metadata": {
+                            "filename": filename,
+                            "subject": subject,
+                            "format": fmt,
+                            "page": page_num,
+                            "source": f"{subject} Notes - Page {page_num}"
+                        }
+                    })
+                    chunk_idx += 1
+            
+            # Output payload
+            chunk_payload = {
+                "filename": filename,
+                "subject": subject,
+                "format": fmt,
+                "total_chunks": len(doc_chunks),
+                "chunks": doc_chunks
+            }
+            
+            # Save file in data/chunks/{subject}/
+            dest_dir = CHUNKS_DIR / subject
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest_path = dest_dir / f"{Path(filename).stem}_chunks.json"
+            
+            with open(dest_path, "w", encoding="utf-8") as f:
+                json.dump(chunk_payload, f, indent=2, ensure_ascii=False)
+                
+            results.append({
+                "filename": filename,
+                "subject": subject,
+                "total_chunks": len(doc_chunks),
+                "status": "chunked",
+                "dest_path": str(dest_path)
+            })
+            logger.info(f"Successfully chunked {filename} into {len(doc_chunks)} chunks.")
+            
+        except Exception as e:
+            logger.error(f"Failed to chunk document {json_path.name}: {e}")
+            results.append({
+                "filename": json_path.name,
+                "status": "failed",
+                "error": str(e)
+            })
+            
+    return results
+
+def get_chunk_statistics() -> Dict[str, Any]:
+    """
+    Gives overall statistics about generated chunks.
+    """
+    stats = {
+        "total_documents": 0,
+        "total_chunks": 0,
+        "average_chunks_per_doc": 0.0,
+        "by_subject": {}
+    }
+    
+    if not CHUNKS_DIR.exists():
+        return stats
+        
+    chunk_files = list(CHUNKS_DIR.glob("**/*_chunks.json"))
+    stats["total_documents"] = len(chunk_files)
+    
+    for f in chunk_files:
+        try:
+            with open(f, "r", encoding="utf-8") as file:
+                data = json.load(file)
+            count = data.get("total_chunks", 0)
+            subject = data.get("subject", "General")
+            
+            stats["total_chunks"] += count
+            stats["by_subject"][subject] = stats["by_subject"].get(subject, 0) + count
+        except Exception:
+            pass
+            
+    if stats["total_documents"] > 0:
+        stats["average_chunks_per_doc"] = round(stats["total_chunks"] / stats["total_documents"], 2)
+        
+    return stats
+
 
