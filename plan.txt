@@ -1,0 +1,507 @@
+```txt
+COLLEGE NOTES ASSISTANT - COMPLETE PROJECT ROADMAP
+
+====================================================
+PROJECT GOAL
+====================================================
+
+Build a RAG-based assistant that can answer questions
+from multiple academic notes.
+
+Supported Subjects:
+- DBMS
+- Operating Systems
+- Computer Networks
+- OOP
+
+Example:
+
+Question:
+What is Deadlock?
+
+Answer:
+Deadlock is a condition where two or more processes
+wait indefinitely for resources held by each other.
+
+Source:
+OS Notes - Page 12
+
+====================================================
+PHASE 0 - PLANNING
+====================================================
+
+Understand the Complete RAG Pipeline
+
+Documents
+    ↓
+Chunking
+    ↓
+Embeddings
+    ↓
+Vector Storage
+    ↓
+Retrieval
+    ↓
+Prompt Construction
+    ↓
+LLM
+    ↓
+Answer
+
+Learn:
+
+- RAG Fundamentals
+- Embeddings
+- Similarity Search
+- Chunking
+- Metadata
+- Retrieval
+
+====================================================
+PHASE 1 - DOCUMENT INGESTION
+====================================================
+
+Goal:
+Load multiple PDFs.
+
+Input:
+
+notes/
+├── dbms.pdf
+├── os.pdf
+├── cn.pdf
+├── oop.pdf
+
+Output:
+
+Raw Text
+
+Tasks:
+
+- Create project structure
+- Read PDFs
+- Extract text
+- Store text
+
+Deliverable:
+
+load_documents()
+
+====================================================
+PHASE 2 - DOCUMENT ANALYSIS
+====================================================
+
+Goal:
+Analyze the dataset.
+
+Calculate:
+
+- Number of PDFs
+- Total Pages
+- Total Words
+- Total Characters
+
+Display:
+
+DBMS.pdf
+Pages: 85
+
+OS.pdf
+Pages: 120
+
+Deliverable:
+
+analyze_documents()
+
+====================================================
+PHASE 3 - CHUNKING
+====================================================
+
+Goal:
+Split documents into meaningful chunks.
+
+Recommended:
+
+Semantic Chunking
+
+Example:
+
+Before:
+
+Deadlock
+Memory Management
+Paging
+
+After:
+
+Chunk 1 → Deadlock
+Chunk 2 → Memory Management
+Chunk 3 → Paging
+
+Metadata Example:
+
+{
+  "subject": "OS",
+  "page": 12
+}
+
+Deliverable:
+
+create_chunks()
+
+====================================================
+PHASE 4 - EMBEDDINGS
+====================================================
+
+Goal:
+Convert chunks into vectors.
+
+Pipeline:
+
+Chunk
+  ↓
+Embedding Model
+  ↓
+Vector
+
+Example:
+
+"Deadlock is a condition"
+
+↓
+
+[0.21, 0.34, 0.87, ...]
+
+Concepts Learned:
+
+- Embeddings
+- Semantic Similarity
+- Vector Representation
+
+Deliverable:
+
+generate_embeddings()
+
+====================================================
+PHASE 5 - KNOWLEDGE BASE
+====================================================
+
+Goal:
+Store vectors and metadata.
+
+Store:
+
+- Embedding
+- Chunk Text
+- Metadata
+
+Metadata:
+
+- Subject
+- Page Number
+- File Name
+
+Deliverable:
+
+create_vector_store()
+
+====================================================
+PHASE 6 - RETRIEVAL SYSTEM
+====================================================
+
+Goal:
+Retrieve relevant chunks.
+
+Question:
+
+What is Normalization?
+
+Pipeline:
+
+Question
+   ↓
+Embedding
+   ↓
+Similarity Search
+   ↓
+Top Chunks
+
+Output:
+
+Chunk 1
+Chunk 2
+Chunk 3
+
+Deliverable:
+
+retrieve_context()
+
+====================================================
+PHASE 7 - PROMPT CONSTRUCTION
+====================================================
+
+Goal:
+Build context-aware prompts.
+
+Template:
+
+Answer using only the provided context.
+
+Context:
+{chunks}
+
+Question:
+{user_query}
+
+Concepts:
+
+- Prompt Engineering
+- Grounded Responses
+- Hallucination Reduction
+
+Deliverable:
+
+build_prompt()
+
+====================================================
+PHASE 8 - ANSWER GENERATION
+====================================================
+
+Goal:
+Generate answers from retrieved notes.
+
+Pipeline:
+
+Retrieved Context
+       +
+User Question
+       ↓
+Language Model
+       ↓
+Answer
+
+Output:
+
+Answer
+
+Source:
+OS Notes
+Page 12
+
+Deliverable:
+
+generate_answer()
+
+====================================================
+PHASE 9 - SOURCE CITATIONS
+====================================================
+
+Goal:
+Show answer sources.
+
+Example:
+
+Answer:
+Deadlock occurs when...
+
+Sources:
+
+OS Notes
+Page 12
+
+OS Notes
+Page 14
+
+Deliverable:
+
+citation_engine()
+
+====================================================
+PHASE 10 - USER INTERFACE
+====================================================
+
+Goal:
+Create a chat interface.
+
+Features:
+
+- PDF Upload
+- Chat Interface
+- Chat History
+- Source Citations
+
+Layout:
+
++-------------------------+
+| Upload PDFs             |
++-------------------------+
+
++-------------------------+
+| Ask Question            |
++-------------------------+
+
++-------------------------+
+| Answer                  |
++-------------------------+
+
++-------------------------+
+| Sources                 |
++-------------------------+
+
+====================================================
+PHASE 11 - MULTI-DOCUMENT RETRIEVAL
+====================================================
+
+Goal:
+Search across all subjects.
+
+Question:
+
+What is Scheduling?
+
+Possible Sources:
+
+- OS Notes
+- DBMS Notes
+
+Concepts:
+
+- Multi-document Retrieval
+- Cross-document Search
+
+====================================================
+PHASE 12 - METADATA FILTERING
+====================================================
+
+Goal:
+Filter retrieval by subject.
+
+Example:
+
+Search only:
+DBMS
+
+Pipeline:
+
+Query
+  +
+Metadata Filter
+  ↓
+Retriever
+
+====================================================
+PHASE 13 - RERANKING
+====================================================
+
+Goal:
+Improve retrieval quality.
+
+Pipeline:
+
+Retriever
+    ↓
+Top 20 Chunks
+    ↓
+Reranker
+    ↓
+Top 5 Chunks
+
+Concepts:
+
+- Precision
+- Relevance
+- Ranking
+
+====================================================
+PHASE 14 - EVALUATION
+====================================================
+
+Goal:
+Evaluate system quality.
+
+Metrics:
+
+- Answer Accuracy
+- Retrieval Accuracy
+- Source Accuracy
+- Latency
+- Retrieval Quality
+
+Testing Dataset:
+
+50 DBMS Questions
+50 OS Questions
+50 CN Questions
+
+====================================================
+FINAL ARCHITECTURE
+====================================================
+
+PDF Notes
+    ↓
+Document Loader
+    ↓
+Semantic Chunking
+    ↓
+Metadata Creation
+    ↓
+Embeddings
+    ↓
+Vector Storage
+    ↓
+Retriever
+    ↓
+Reranker
+    ↓
+Prompt Builder
+    ↓
+LLM
+    ↓
+Answer + Citations
+
+====================================================
+RESUME-WORTHY FEATURES
+====================================================
+
+✓ Multiple PDFs
+
+✓ Semantic Chunking
+
+✓ Metadata Management
+
+✓ Vector Search
+
+✓ Source Citations
+
+✓ Subject Filtering
+
+✓ Chat Interface
+
+✓ Reranking
+
+✓ Multi-document Retrieval
+
+====================================================
+SKILLS GAINED
+====================================================
+
+- Retrieval-Augmented Generation (RAG)
+- Semantic Search
+- Embeddings
+- Chunking Strategies
+- Metadata Management
+- Information Retrieval
+- Reranking
+- Prompt Engineering
+- NLP Pipelines
+- Vector Search
+- Multi-document Retrieval
+- AI Application Development
+- Context-Aware Question Answering
+- Search System Design
+- LLM Integration
+
+====================================================
+END OF PROJECT ROADMAP
+====================================================
+```
