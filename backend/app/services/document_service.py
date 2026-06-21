@@ -3,7 +3,7 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from app.core import config
 from app.utils.pdf_parser import extract_pdf_data
@@ -27,70 +27,79 @@ def classify_subject(filename: str) -> str:
         return "OOP"
     return "General"
 
-def get_subject_for_file(file_path: Path) -> str:
+def get_subject_for_file(file_path: Path, user_id: Optional[str] = None) -> str:
     """
-    Determine the subject: if in a subfolder under notes/, use subfolder name.
-    If in the root notes/ folder, fallback to classify_subject(filename).
+    Determine the subject: if in a subfolder under notes/{user_id}/, use subfolder name.
+    If in the root notes/{user_id}/ folder, fallback to classify_subject(filename).
     """
-    # Resolve paths to avoid symlink issues
     resolved_file = file_path.resolve()
-    resolved_notes = config.NOTES_DIR.resolve()
+    resolved_notes = (config.NOTES_DIR / user_id if user_id else config.NOTES_DIR).resolve()
     
     # If the file is directly in the notes root
     if resolved_file.parent == resolved_notes:
         return classify_subject(file_path.name)
         
-    # If it's in a subfolder, the direct child of notes/ is the subject folder
-    # e.g., resolved_file = /notes/OS/unit1/lecture.pdf -> relative to resolved_notes = OS/unit1/lecture.pdf
-    # We want the top-level subfolder "OS" as the subject.
     try:
         relative_path = resolved_file.relative_to(resolved_notes)
         return relative_path.parts[0]
     except Exception:
         return classify_subject(file_path.name)
 
-def get_extracted_path(file_path: Path, subject: str) -> Path:
+def get_extracted_path(file_path: Path, subject: str, user_id: Optional[str] = None) -> Path:
     """
     Get the path where the extracted JSON file should be saved.
-    Replicates directory structure under data/extracted/{subject}/{filename}.json
+    Replicates directory structure under data/extracted/{user_id}/{subject}/{filename}.json
     """
     json_filename = file_path.with_suffix(".json").name
-    subject_dir = config.EXTRACTED_DIR / subject
+    if user_id:
+        subject_dir = config.EXTRACTED_DIR / user_id / subject
+    else:
+        subject_dir = config.EXTRACTED_DIR / subject
     subject_dir.mkdir(parents=True, exist_ok=True)
     return subject_dir / json_filename
 
-def get_supported_files() -> List[Path]:
+def get_supported_files(user_id: Optional[str] = None) -> List[Path]:
     """
-    Find all PDF, PPTX, and DOCX files in NOTES_DIR and its subdirectories.
+    Find all PDF, PPTX, and DOCX files in NOTES_DIR/{user_id} and its subdirectories.
     """
-    if not config.NOTES_DIR.exists():
+    target_dir = config.NOTES_DIR / user_id if user_id else config.NOTES_DIR
+    if not target_dir.exists():
         return []
     
     all_files = []
     # Recursively list files and filter by supported extensions
-    for p in config.NOTES_DIR.glob("**/*"):
+    for p in target_dir.glob("**/*"):
         if p.is_file() and p.suffix.lower() in [".pdf", ".pptx", ".docx"]:
+            # If user_id is NOT provided (i.e. global scan), we want to EXCLUDE
+            # any subdirectories that belong to individual users
+            if not user_id:
+                try:
+                    rel = p.relative_to(config.NOTES_DIR)
+                    if rel.parts and rel.parts[0].startswith("user_"):
+                        continue
+                except Exception:
+                    pass
             all_files.append(p)
             
     return all_files
 
-def load_documents() -> List[Dict[str, Any]]:
+def load_documents(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """
-    Recursively scan NOTES_DIR, extract text using appropriate parser,
+    Recursively scan NOTES_DIR/{user_id}, extract text using appropriate parser,
     save cached JSON by subject, and return list of results.
     """
     results = []
     
-    # Ensure root notes directory exists
-    config.NOTES_DIR.mkdir(parents=True, exist_ok=True)
+    target_notes_dir = config.NOTES_DIR / user_id if user_id else config.NOTES_DIR
+    target_notes_dir.mkdir(parents=True, exist_ok=True)
     
-    files_to_process = get_supported_files()
-    logger.info(f"Found {len(files_to_process)} document(s) in {config.NOTES_DIR}")
+    files_to_process = get_supported_files(user_id)
+    logger.info(f"Found {len(files_to_process)} document(s) in {target_notes_dir}")
     
     for file_path in files_to_process:
         filename = file_path.name
-        subject = get_subject_for_file(file_path)
-        json_path = get_extracted_path(file_path, subject)
+        subject = get_subject_for_file(file_path, user_id)
+        json_path = get_extracted_path(file_path, subject, user_id)
         ext = file_path.suffix.lower()
         
         try:
@@ -157,17 +166,17 @@ def load_documents() -> List[Dict[str, Any]]:
             
     return results
 
-def get_all_documents() -> List[Dict[str, Any]]:
+def get_all_documents(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Get a list of all documents recursively, along with their subject and ingestion status.
     """
     documents = []
-    files = get_supported_files()
+    files = get_supported_files(user_id)
     
     for file_path in files:
         filename = file_path.name
-        subject = get_subject_for_file(file_path)
-        json_path = get_extracted_path(file_path, subject)
+        subject = get_subject_for_file(file_path, user_id)
+        json_path = get_extracted_path(file_path, subject, user_id)
         is_processed = json_path.exists()
         ext = file_path.suffix.lower()
         
@@ -177,7 +186,7 @@ def get_all_documents() -> List[Dict[str, Any]]:
             "format": ext[1:].upper(),
             "file_size_bytes": file_path.stat().st_size,
             "is_processed": is_processed,
-            "relative_path": str(file_path.relative_to(config.NOTES_DIR))
+            "relative_path": str(file_path.relative_to(config.NOTES_DIR / user_id if user_id else config.NOTES_DIR))
         }
         
         if is_processed:
@@ -188,10 +197,12 @@ def get_all_documents() -> List[Dict[str, Any]]:
                 doc_info["processed_at"] = doc_data.get("processed_at", None)
             except Exception:
                 pass
+        
+        documents.append(doc_info)
                 
     return documents
 
-def analyze_documents() -> Dict[str, Any]:
+def analyze_documents(user_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Analyzes the extracted JSON files and returns dataset statistics:
     - Overall statistics: total documents, total pages, total words, total characters, formats.
@@ -210,11 +221,21 @@ def analyze_documents() -> Dict[str, Any]:
         "by_document": []
     }
     
-    if not config.EXTRACTED_DIR.exists():
+    extracted_target = config.EXTRACTED_DIR / user_id if user_id else config.EXTRACTED_DIR
+    if not extracted_target.exists():
         return analysis
         
     # Recursively find all generated JSON files in the extracted directory
-    json_files = list(config.EXTRACTED_DIR.glob("**/*.json"))
+    json_files = []
+    for p in extracted_target.glob("**/*.json"):
+        if not user_id:
+            try:
+                rel = p.relative_to(config.EXTRACTED_DIR)
+                if rel.parts and rel.parts[0].startswith("user_"):
+                    continue
+            except Exception:
+                pass
+        json_files.append(p)
     
     for json_path in json_files:
         try:
@@ -276,22 +297,33 @@ def analyze_documents() -> Dict[str, Any]:
 # Path for chunks storage
 CHUNKS_DIR = config.DATA_DIR / "chunks"
 
-def create_chunks() -> List[Dict[str, Any]]:
+def create_chunks(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Load extracted JSON documents, run the SemanticChunker on each page,
-    attach metadata, save chunks to data/chunks/{subject}/, and return results.
+    attach metadata, save chunks to data/chunks/{user_id}/{subject}/, and return results.
     """
     from app.utils.semantic_chunker import SemanticChunker
     
     results = []
     CHUNKS_DIR.mkdir(parents=True, exist_ok=True)
     
-    if not config.EXTRACTED_DIR.exists():
+    extracted_target = config.EXTRACTED_DIR / user_id if user_id else config.EXTRACTED_DIR
+    if not extracted_target.exists():
         logger.warning("Extracted documents directory does not exist.")
         return results
         
     # Recursively find all JSON extracted files
-    json_files = list(config.EXTRACTED_DIR.glob("**/*.json"))
+    json_files = []
+    for p in extracted_target.glob("**/*.json"):
+        if not user_id:
+            try:
+                rel = p.relative_to(config.EXTRACTED_DIR)
+                if rel.parts and rel.parts[0].startswith("user_"):
+                    continue
+            except Exception:
+                pass
+        json_files.append(p)
+        
     logger.info(f"Found {len(json_files)} extracted document JSON(s) to chunk.")
     
     chunker = SemanticChunker()
@@ -323,7 +355,9 @@ def create_chunks() -> List[Dict[str, Any]]:
                 page_chunks = chunker.chunk_text(text)
                 
                 for chunk_text in page_chunks:
-                    chunk_id = f"{subject}_{clean_filename_id}_chunk_{chunk_idx}"
+                    # Formulate chunk ID prefix including user_id
+                    uid_prefix = f"{user_id}_" if user_id else ""
+                    chunk_id = f"{uid_prefix}{subject}_{clean_filename_id}_chunk_{chunk_idx}"
                     chunk_id = re.sub(r'[^\w\-]', '', chunk_id)
                     
                     doc_chunks.append({
@@ -348,8 +382,11 @@ def create_chunks() -> List[Dict[str, Any]]:
                 "chunks": doc_chunks
             }
             
-            # Save file in data/chunks/{subject}/
-            dest_dir = CHUNKS_DIR / subject
+            # Save file in data/chunks/{user_id}/{subject}/
+            if user_id:
+                dest_dir = CHUNKS_DIR / user_id / subject
+            else:
+                dest_dir = CHUNKS_DIR / subject
             dest_dir.mkdir(parents=True, exist_ok=True)
             dest_path = dest_dir / f"{Path(filename).stem}_chunks.json"
             
@@ -375,7 +412,7 @@ def create_chunks() -> List[Dict[str, Any]]:
             
     return results
 
-def get_chunk_statistics() -> Dict[str, Any]:
+def get_chunk_statistics(user_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Gives overall statistics about generated chunks.
     """
@@ -386,10 +423,21 @@ def get_chunk_statistics() -> Dict[str, Any]:
         "by_subject": {}
     }
     
-    if not CHUNKS_DIR.exists():
+    chunks_target = CHUNKS_DIR / user_id if user_id else CHUNKS_DIR
+    if not chunks_target.exists():
         return stats
         
-    chunk_files = list(CHUNKS_DIR.glob("**/*_chunks.json"))
+    chunk_files = []
+    for p in chunks_target.glob("**/*_chunks.json"):
+        if not user_id:
+            try:
+                rel = p.relative_to(CHUNKS_DIR)
+                if rel.parts and rel.parts[0].startswith("user_"):
+                    continue
+            except Exception:
+                pass
+        chunk_files.append(p)
+        
     stats["total_documents"] = len(chunk_files)
     
     for f in chunk_files:
@@ -412,21 +460,32 @@ def get_chunk_statistics() -> Dict[str, Any]:
 # Path for embedded storage
 EMBEDDED_DIR = config.DATA_DIR / "embedded"
 
-def generate_embeddings() -> List[Dict[str, Any]]:
+def generate_embeddings(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Load chunk JSON files, pass text to EmbeddingService,
-    save embedded chunks in data/embedded/{subject}/, and return results.
+    save embedded chunks in data/embedded/{user_id}/{subject}/, and return results.
     """
     from app.services.embedding_service import EmbeddingService
     
     results = []
     EMBEDDED_DIR.mkdir(parents=True, exist_ok=True)
     
-    if not CHUNKS_DIR.exists():
+    chunks_target = CHUNKS_DIR / user_id if user_id else CHUNKS_DIR
+    if not chunks_target.exists():
         logger.warning("Chunks directory does not exist. Please chunk files first.")
         return results
         
-    chunk_files = list(CHUNKS_DIR.glob("**/*_chunks.json"))
+    chunk_files = []
+    for p in chunks_target.glob("**/*_chunks.json"):
+        if not user_id:
+            try:
+                rel = p.relative_to(CHUNKS_DIR)
+                if rel.parts and rel.parts[0].startswith("user_"):
+                    continue
+            except Exception:
+                pass
+        chunk_files.append(p)
+        
     logger.info(f"Found {len(chunk_files)} chunk files to embed.")
     
     embedder = EmbeddingService()
@@ -472,8 +531,11 @@ def generate_embeddings() -> List[Dict[str, Any]]:
                 "chunks": embedded_chunks
             }
             
-            # Save file in data/embedded/{subject}/
-            dest_dir = EMBEDDED_DIR / subject
+            # Save file in data/embedded/{user_id}/{subject}/
+            if user_id:
+                dest_dir = EMBEDDED_DIR / user_id / subject
+            else:
+                dest_dir = EMBEDDED_DIR / subject
             dest_dir.mkdir(parents=True, exist_ok=True)
             dest_path = dest_dir / f"{Path(filename).stem}_embedded.json"
             
@@ -501,7 +563,7 @@ def generate_embeddings() -> List[Dict[str, Any]]:
             
     return results
 
-def get_embedding_statistics() -> Dict[str, Any]:
+def get_embedding_statistics(user_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Returns statistics about the generated embeddings.
     """
@@ -512,10 +574,21 @@ def get_embedding_statistics() -> Dict[str, Any]:
         "by_subject": {}
     }
     
-    if not EMBEDDED_DIR.exists():
+    embedded_target = EMBEDDED_DIR / user_id if user_id else EMBEDDED_DIR
+    if not embedded_target.exists():
         return stats
         
-    embedded_files = list(EMBEDDED_DIR.glob("**/*_embedded.json"))
+    embedded_files = []
+    for p in embedded_target.glob("**/*_embedded.json"):
+        if not user_id:
+            try:
+                rel = p.relative_to(EMBEDDED_DIR)
+                if rel.parts and rel.parts[0].startswith("user_"):
+                    continue
+            except Exception:
+                pass
+        embedded_files.append(p)
+        
     stats["total_embedded_documents"] = len(embedded_files)
     
     for f in embedded_files:
@@ -533,6 +606,3 @@ def get_embedding_statistics() -> Dict[str, Any]:
             pass
             
     return stats
-
-
-

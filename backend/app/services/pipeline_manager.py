@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from app.services import document_service
 from app.services.vector_store import VectorStoreService
@@ -8,15 +8,18 @@ logger = logging.getLogger(__name__)
 
 class PipelineManager:
     @staticmethod
-    def run_full_indexing_pipeline() -> Dict[str, Any]:
+    def run_full_indexing_pipeline(user_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Executes the end-to-end document ingestion, chunking, embedding, 
         and vector store indexing pipeline.
         
+        Args:
+            user_id (str, optional): The user identifier to isolate operations.
+            
         Returns:
             Dict[str, Any]: Execution statistics for each stage.
         """
-        logger.info("=== Starting Full Indexing Pipeline ===")
+        logger.info(f"=== Starting Full Indexing Pipeline for user_id={user_id} ===")
         stats = {
             "ingestion": {},
             "chunking": {},
@@ -28,7 +31,7 @@ class PipelineManager:
         try:
             # Stage 1: Ingestion
             logger.info("Pipeline Stage 1/4: Ingesting notes documents...")
-            ingest_results = document_service.load_documents()
+            ingest_results = document_service.load_documents(user_id=user_id)
             processed_new = sum(1 for r in ingest_results if r.get("status") == "processed")
             loaded_cached = sum(1 for r in ingest_results if r.get("status") == "cached")
             failed_ingest = sum(1 for r in ingest_results if r.get("status") == "failed")
@@ -43,7 +46,7 @@ class PipelineManager:
             
             # Stage 2: Semantic Chunking
             logger.info("Pipeline Stage 2/4: Chunking text files semantically...")
-            chunk_results = document_service.create_chunks()
+            chunk_results = document_service.create_chunks(user_id=user_id)
             success_chunks = sum(1 for r in chunk_results if r.get("status") == "chunked")
             failed_chunks = sum(1 for r in chunk_results if r.get("status") == "failed")
             
@@ -56,7 +59,7 @@ class PipelineManager:
             
             # Stage 3: Embedding Generation
             logger.info("Pipeline Stage 3/4: Generating vector embeddings...")
-            embed_results = document_service.generate_embeddings()
+            embed_results = document_service.generate_embeddings(user_id=user_id)
             success_embeds = sum(1 for r in embed_results if r.get("status") == "embedded")
             failed_embeds = sum(1 for r in embed_results if r.get("status") == "failed")
             
@@ -70,7 +73,7 @@ class PipelineManager:
             # Stage 4: Pinecone Vector Database Indexing
             logger.info("Pipeline Stage 4/4: Upserting vectors to Pinecone index...")
             vs = VectorStoreService()
-            index_stats = vs.index_embedded_chunks()
+            index_stats = vs.index_embedded_chunks(user_id=user_id)
             
             stats["indexing"] = index_stats
             logger.info(f"Pinecone indexing done. Chunks indexed: {index_stats.get('indexed_chunks')}")

@@ -105,7 +105,7 @@ class VectorStoreService:
             logger.error(f"Pinecone: Failed to get index statistics: {e}")
             return {"status": "error", "error": str(e)}
             
-    def index_embedded_chunks(self) -> Dict[str, Any]:
+    def index_embedded_chunks(self, user_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Scans data/embedded/ recursively, loads chunks and vectors,
         provisions the Pinecone index, and upserts in batches.
@@ -119,11 +119,24 @@ class VectorStoreService:
         }
         
         embedded_dir = config.DATA_DIR / "embedded"
+        if user_id:
+            embedded_dir = embedded_dir / user_id
+            
         if not embedded_dir.exists():
             logger.warning("No embedded files found. Please generate embeddings first.")
             return stats
             
-        embedded_files = list(embedded_dir.glob("**/*_embedded.json"))
+        embedded_files = []
+        for p in embedded_dir.glob("**/*_embedded.json"):
+            if not user_id:
+                try:
+                    rel = p.relative_to(config.DATA_DIR / "embedded")
+                    if rel.parts and rel.parts[0].startswith("user_"):
+                        continue
+                except Exception:
+                    pass
+            embedded_files.append(p)
+            
         if not embedded_files:
             logger.warning("No embedded JSON files found in data/embedded/.")
             return stats
@@ -166,6 +179,7 @@ class VectorStoreService:
                     # because Pinecone only stores IDs and vectors.
                     meta = chunk["metadata"].copy()
                     meta["text"] = chunk["text"]
+                    meta["user_id"] = user_id or "global"
                     
                     # Pad/truncate vector if index dimension mismatches chunk embedding dimension
                     raw_emb = chunk["embedding"]
@@ -207,7 +221,7 @@ class VectorStoreService:
                 
         return stats
         
-    def similarity_search(self, query_vector: List[float], top_k: int = 5, subject: Optional[str] = None) -> List[Dict[str, Any]]:
+    def similarity_search(self, query_vector: List[float], top_k: int = 5, subject: Optional[str] = None, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Query Pinecone index using a vector. Returns matches with similarity scores.
         """
@@ -228,10 +242,11 @@ class VectorStoreService:
                 else:
                     query_vector = query_vector[:target_dim]
                     
-            # Formulate query filter if subject is provided
-            query_filter = None
+            # Formulate query filter if subject or user_id is provided
+            query_filter = {}
+            query_filter["user_id"] = user_id or "global"
             if subject:
-                query_filter = {"subject": subject}
+                query_filter["subject"] = subject
                 
             results = self.index.query(
                 vector=query_vector,

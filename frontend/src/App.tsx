@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Show, SignInButton, useAuth } from '@clerk/react';
 import { Sidebar } from './components/Sidebar';
 import { ChatContainer } from './components/ChatContainer';
 import { PipelineStatus } from './components/PipelineStatus';
@@ -29,7 +30,68 @@ interface PipelineData {
   indexing?: { scanned_files: number; indexed_chunks: number; status: string };
 }
 
-function App() {
+const LoginScreen = () => {
+  return (
+    <div style={{
+      display: 'flex',
+      height: '100vh',
+      width: '100vw',
+      justifyContent: 'center',
+      alignItems: 'center',
+      position: 'relative',
+      overflow: 'hidden'
+    }}>
+      <div className="glass-panel" style={{
+        width: '90%',
+        maxWidth: '420px',
+        padding: '40px 32px',
+        textAlign: 'center',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '24px',
+        background: 'var(--glass-bg)',
+        border: '1px solid var(--glass-border)',
+        boxShadow: '0 8px 32px 0 rgba(15, 23, 42, 0.08)'
+      }}>
+        <div style={{
+          background: 'rgba(244, 63, 94, 0.08)',
+          border: '1px solid rgba(244, 63, 94, 0.2)',
+          borderRadius: '50%',
+          width: '64px',
+          height: '64px',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          boxShadow: '0 4px 12px rgba(244, 63, 94, 0.1)'
+        }}>
+          <span style={{ fontSize: '28px' }}>📚</span>
+        </div>
+        
+        <div>
+          <h1 className="glow-accent-purple" style={{ fontSize: '24px', fontWeight: 700, marginBottom: '8px', letterSpacing: '-0.5px' }}>
+            Easy Study
+          </h1>
+          <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+            College Notes RAG Assistant
+          </p>
+        </div>
+
+        <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6', margin: '8px 0' }}>
+          Securely upload, organize, and chat with your study materials. Sign in to start your personalized academic library.
+        </p>
+
+        <SignInButton mode="modal">
+          <button className="btn-glass btn-primary" style={{ width: '100%', padding: '14px 20px', fontSize: '14px', fontWeight: 600 }}>
+            Sign In with Clerk
+          </button>
+        </SignInButton>
+      </div>
+    </div>
+  );
+};
+
+function NotesAppContent() {
   const [activeSubject, setActiveSubject] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -41,11 +103,29 @@ function App() {
     totalChunks: 0
   });
 
+  const { getToken } = useAuth();
+
+  const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+    try {
+      const token = await getToken();
+      return fetch(url, {
+        ...options,
+        headers: {
+          ...options.headers,
+          'Authorization': `Bearer ${token}`
+        }
+      });
+    } catch (e) {
+      console.error("Clerk: Failed to acquire session token", e);
+      throw e;
+    }
+  };
+
   // Fetch db stats
   const fetchStats = async () => {
     try {
-      const res = await fetch("/api/vectorstore/stats");
-      const analysisRes = await fetch("/api/documents/analysis");
+      const res = await fetchWithAuth("/api/vectorstore/stats");
+      const analysisRes = await fetchWithAuth("/api/documents/analysis");
       
       let docCount = 0;
       let pageCount = 0;
@@ -87,7 +167,7 @@ function App() {
 
     try {
       // 2. Query FastAPI Chat Route
-      const res = await fetch("/api/chat", {
+      const res = await fetchWithAuth("/api/chat", {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -139,7 +219,7 @@ function App() {
     setPipelineStatus({ status: 'running' });
 
     try {
-      const res = await fetch("/api/pipeline/run", {
+      const res = await fetchWithAuth("/api/pipeline/run", {
         method: 'POST'
       });
       const data = await res.json();
@@ -200,6 +280,19 @@ function App() {
         />
       )}
     </div>
+  );
+}
+
+function App() {
+  return (
+    <>
+      <Show when="signed-in">
+        <NotesAppContent />
+      </Show>
+      <Show when="signed-out">
+        <LoginScreen />
+      </Show>
+    </>
   );
 }
 

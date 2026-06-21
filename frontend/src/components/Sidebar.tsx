@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth, UserButton } from '@clerk/react';
 import { 
   BookOpen, 
   UploadCloud, 
@@ -52,10 +53,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "OOP", name: "OOP", count: 0 }
   ];
 
+  const { getToken } = useAuth();
+
+  const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+    try {
+      const token = await getToken();
+      return fetch(url, {
+        ...options,
+        headers: {
+          ...options.headers,
+          'Authorization': `Bearer ${token}`
+        }
+      });
+    } catch (e) {
+      console.error("Clerk: Failed to acquire session token", e);
+      throw e;
+    }
+  };
+
   // Fetch document lists
   const fetchDocuments = async () => {
     try {
-      const res = await fetch("/api/documents");
+      const res = await fetchWithAuth("/api/documents");
       if (res.ok) {
         const data = await res.json();
         setDocuments(data.documents || []);
@@ -93,7 +112,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
     try {
       const url = `/api/ingest/upload?subject=${encodeURIComponent(uploadSubject)}`;
-      const res = await fetch(url, {
+      const res = await fetchWithAuth(url, {
         method: 'POST',
         body: formData
       });
@@ -129,11 +148,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <div className="glass-panel" style={{ width: 'var(--sidebar-width)', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       
       {/* App Header */}
-      <div style={{ padding: '24px 20px', borderBottom: '1px solid var(--glass-border)', display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <BookOpen style={{ color: 'var(--accent-cyan)', width: '28px', height: '28px' }} />
-        <div>
-          <h1 style={{ fontSize: '18px', fontWeight: 700, letterSpacing: '-0.5px' }}>Easy Study</h1>
-          <p style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>College Notes RAG Assistant</p>
+      <div style={{ padding: '24px 20px', borderBottom: '1px solid var(--glass-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <BookOpen style={{ color: 'var(--accent-cyan)', width: '28px', height: '28px' }} />
+          <div>
+            <h1 style={{ fontSize: '18px', fontWeight: 700, letterSpacing: '-0.5px' }}>Easy Study</h1>
+            <p style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>College Notes RAG Assistant</p>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <UserButton />
         </div>
       </div>
 

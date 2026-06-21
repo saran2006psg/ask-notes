@@ -18,7 +18,8 @@ class RetrievalService:
         query: str, 
         subject: Optional[str] = None, 
         top_k: int = 5,
-        rerank: bool = True
+        rerank: bool = True,
+        user_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
         Retrieves matching document chunks for a given query, optionally filtered by subject.
@@ -28,11 +29,12 @@ class RetrievalService:
             subject (str, optional): The subject category to filter by (e.g. 'DBMS', 'OS').
             top_k (int): Number of context chunks to retrieve.
             rerank (bool): Whether to use BGE reranker to refine results.
+            user_id (str, optional): The user identifier to restrict query matching scope.
             
         Returns:
             List[Dict[str, Any]]: List of matching chunks with text, scores, and metadata.
         """
-        logger.info(f"Retrieval Request: query='{query}' | subject={subject} | top_k={top_k} | rerank={rerank}")
+        logger.info(f"Retrieval Request: query='{query}' | subject={subject} | top_k={top_k} | rerank={rerank} | user_id={user_id}")
         
         try:
             # 1. Embed query
@@ -45,7 +47,8 @@ class RetrievalService:
             matches = self.vector_store.similarity_search(
                 query_vector=query_vector,
                 top_k=search_k,
-                subject=subject
+                subject=subject,
+                user_id=user_id
             )
             
             logger.info(f"Retrieved {len(matches)} candidate match(es) from Pinecone.")
