@@ -321,6 +321,17 @@ def chat_endpoint(request: ChatRequest):
         # 4. Extract and verify citations actually cited in response
         verified_citations = cit_engine.citation_engine(answer=answer, retrieved_chunks=chunks)
         
+        # Strip parenthetical inline citations from the final answer text returned to the user
+        import re
+        # Pattern to match (Source: Subject/File - Page X) or any (Source: ...) citation
+        clean_answer = re.sub(r"\s*\(Source:\s*.*?\)", "", answer, flags=re.IGNORECASE)
+        # Clean double spaces
+        clean_answer = re.sub(r" +", " ", clean_answer)
+        # Clean space before periods/commas
+        clean_answer = re.sub(r"\s+\.", ".", clean_answer)
+        clean_answer = re.sub(r"\s+,", ",", clean_answer)
+        clean_answer = clean_answer.strip()
+        
         # Format clean retrieved context citations structure
         retrieved_citations = []
         for idx, chunk in enumerate(chunks):
@@ -332,13 +343,14 @@ def chat_endpoint(request: ChatRequest):
                 "filename": meta.get("filename"),
                 "subject": meta.get("subject"),
                 "page": meta.get("page"),
-                "source": meta.get("source")
+                "source": meta.get("source"),
+                "text": chunk.get("text", "")
             })
             
         return {
             "query": request.query,
             "subject": request.subject,
-            "answer": answer,
+            "answer": clean_answer,
             "verified_citations": verified_citations,
             "retrieved_citations": retrieved_citations
         }

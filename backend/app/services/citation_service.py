@@ -76,7 +76,8 @@ class CitationService:
                         "page": meta.get("page"),
                         "source": meta.get("source"),
                         "chunk_id": matched_chunk.get("chunk_id"),
-                        "score": matched_chunk.get("score")
+                        "score": matched_chunk.get("score"),
+                        "text": matched_chunk.get("text", "")
                     })
                     logger.info(f"Verified Citation: {meta.get('filename')} (Page {meta.get('page')})")
             else:
