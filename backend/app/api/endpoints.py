@@ -7,6 +7,8 @@ from fastapi import APIRouter, File, UploadFile, HTTPException, Query
 from app.core import config
 from app.services import document_service
 from app.services.vector_store import VectorStoreService
+from app.services.retrieval_service import RetrievalService
+
 
 
 logger = logging.getLogger(__name__)
@@ -191,30 +193,53 @@ def get_embedding_stats():
 @router.post("/vectorstore/index")
 def index_vectorstore():
     """
-    Trigger indexing of all cached vector embeddings into local persistent Chroma DB.
+    Trigger indexing of all cached vector embeddings into Pinecone.
     """
     try:
         vs = VectorStoreService()
         stats = vs.index_embedded_chunks()
         return {
-            "message": "Chroma DB indexing complete.",
+            "message": "Pinecone indexing complete.",
             "statistics": stats
         }
     except Exception as e:
-        logger.error(f"Error indexing vectors in Chroma DB: {e}")
+        logger.error(f"Error indexing vectors in Pinecone: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/vectorstore/stats")
 def get_vectorstore_stats():
     """
-    Get statistics about the indexed collection inside Chroma DB.
+    Get statistics about the indexed collection inside Pinecone.
     """
     try:
         vs = VectorStoreService()
         return vs.get_stats()
     except Exception as e:
-        logger.error(f"Error fetching Chroma DB statistics: {e}")
+        logger.error(f"Error fetching Pinecone statistics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/retrieve")
+def retrieve_context(
+    query: str = Query(..., description="The query string to search for"),
+    subject: Optional[str] = Query(None, description="Optional subject to filter by, e.g., 'DBMS', 'OS'"),
+    top_k: int = Query(5, description="Number of results to retrieve")
+):
+    """
+    Retrieve matching context chunks for a query from Pinecone, with optional subject filtering.
+    """
+    try:
+        retriever = RetrievalService()
+        results = retriever.retrieve_context(query=query, subject=subject, top_k=top_k)
+        return {
+            "query": query,
+            "subject": subject,
+            "top_k": top_k,
+            "results": results
+        }
+    except Exception as e:
+        logger.error(f"Error during context retrieval: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 

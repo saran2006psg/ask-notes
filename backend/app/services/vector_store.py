@@ -2,7 +2,7 @@ import os
 import json
 import logging
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from pinecone import Pinecone, ServerlessSpec
 from app.core import config
@@ -207,7 +207,7 @@ class VectorStoreService:
                 
         return stats
         
-    def similarity_search(self, query_vector: List[float], top_k: int = 5) -> List[Dict[str, Any]]:
+    def similarity_search(self, query_vector: List[float], top_k: int = 5, subject: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Query Pinecone index using a vector. Returns matches with similarity scores.
         """
@@ -228,9 +228,15 @@ class VectorStoreService:
                 else:
                     query_vector = query_vector[:target_dim]
                     
+            # Formulate query filter if subject is provided
+            query_filter = None
+            if subject:
+                query_filter = {"subject": subject}
+                
             results = self.index.query(
                 vector=query_vector,
                 top_k=top_k,
+                filter=query_filter,
                 include_metadata=True
             )
             
