@@ -12,6 +12,8 @@ from app.services.retrieval_service import RetrievalService
 from app.services.prompt_service import PromptService
 from app.services.llm_service import LLMService
 from app.services.citation_service import CitationService
+from app.services.pipeline_manager import PipelineManager
+
 
 
 
@@ -342,6 +344,21 @@ def chat_endpoint(request: ChatRequest):
         }
     except Exception as e:
         logger.error(f"Error in RAG chat pipeline: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/pipeline/run")
+def run_indexing_pipeline():
+    """
+    Trigger the end-to-end RAG indexing pipeline: ingest documents,
+    create chunks, generate embeddings, and upsert them to Pinecone.
+    """
+    try:
+        results = PipelineManager.run_full_indexing_pipeline()
+        if results.get("status") == "failed":
+            raise HTTPException(status_code=500, detail=results.get("error"))
+        return results
+    except Exception as e:
+        logger.error(f"Error running pipeline: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

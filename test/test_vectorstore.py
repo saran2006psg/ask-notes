@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 # Add backend directory to path so we can import app modules
-sys.path.append(str(Path(__file__).resolve().parent / "backend"))
+sys.path.append(str(Path(__file__).resolve().parent.parent / "backend"))
 
 from app.services.vector_store import VectorStoreService
 from app.services.embedding_service import EmbeddingService
