@@ -222,18 +222,20 @@ def get_vectorstore_stats():
 def retrieve_context(
     query: str = Query(..., description="The query string to search for"),
     subject: Optional[str] = Query(None, description="Optional subject to filter by, e.g., 'DBMS', 'OS'"),
-    top_k: int = Query(5, description="Number of results to retrieve")
+    top_k: int = Query(5, description="Number of results to retrieve"),
+    rerank: bool = Query(True, description="Whether to apply BGE cross-encoder reranking")
 ):
     """
-    Retrieve matching context chunks for a query from Pinecone, with optional subject filtering.
+    Retrieve matching context chunks for a query from Pinecone, with optional subject filtering and BGE reranking.
     """
     try:
         retriever = RetrievalService()
-        results = retriever.retrieve_context(query=query, subject=subject, top_k=top_k)
+        results = retriever.retrieve_context(query=query, subject=subject, top_k=top_k, rerank=rerank)
         return {
             "query": query,
             "subject": subject,
             "top_k": top_k,
+            "rerank": rerank,
             "results": results
         }
     except Exception as e:
