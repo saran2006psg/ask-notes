@@ -30,11 +30,11 @@ def main():
     # Fetch overall stats
     stats = document_service.get_chunk_statistics()
     print("\n====================================================")
-    print("📊 CHUNKING STATISTICS SUMMARY")
+    print("CHUNKING STATISTICS SUMMARY")
     print("====================================================")
-    print(f"  • Total Documents Chunked: {stats.get('total_documents')}")
-    print(f"  • Total Chunks Generated:  {stats.get('total_chunks')}")
-    print(f"  • Avg Chunks Per Document: {stats.get('average_chunks_per_doc')}")
+    print(f"  * Total Documents Chunked: {stats.get('total_documents')}")
+    print(f"  * Total Chunks Generated:  {stats.get('total_chunks')}")
+    print(f"  * Avg Chunks Per Document: {stats.get('average_chunks_per_doc')}")
     
     print("\nChunks by Subject:")
     for subj, count in stats.get("by_subject", {}).items():
@@ -44,7 +44,7 @@ def main():
     chunk_files = list(document_service.CHUNKS_DIR.glob("**/*_chunks.json"))
     if chunk_files:
         print("\n====================================================")
-        print("🔍 SAMPLE CHUNK DATA PREVIEW")
+        print("SAMPLE CHUNK DATA PREVIEW")
         print("====================================================")
         try:
             with open(chunk_files[0], "r", encoding="utf-8") as f:
@@ -53,9 +53,9 @@ def main():
             chunks = data.get("chunks", [])
             if chunks:
                 sample = chunks[0]
-                print(f"  • Chunk ID: {sample.get('chunk_id')}")
-                print(f"  • Content Length: {len(sample.get('text'))} chars")
-                print("  • Metadata:")
+                print(f"  * Chunk ID: {sample.get('chunk_id')}")
+                print(f"  * Content Length: {len(sample.get('text'))} chars")
+                print("  * Metadata:")
                 for k, v in sample.get("metadata", {}).items():
                     print(f"      - {k}: {v}")
                 print("  • Text Content Preview:")

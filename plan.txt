@@ -183,11 +183,12 @@ Deliverable:
 generate_embeddings()
 
 ====================================================
-PHASE 5 - KNOWLEDGE BASE
+PHASE 5 - KNOWLEDGE BASE store in vector database
 ====================================================
 
 Goal:
 Store vectors and metadata.
+use chroma db 
 
 Store:
 

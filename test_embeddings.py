@@ -32,10 +32,10 @@ def main():
     # Query stats
     stats = document_service.get_embedding_statistics()
     print("\n====================================================")
-    print("📊 EMBEDDING STATISTICS SUMMARY")
+    print("EMBEDDING STATISTICS SUMMARY")
     print("====================================================")
-    print(f"  • Total Embedded Documents: {stats.get('total_embedded_documents')}")
-    print(f"  • Total Embedded Chunks:    {stats.get('total_embedded_chunks')}")
+    print(f"  * Total Embedded Documents: {stats.get('total_embedded_documents')}")
+    print(f"  * Total Embedded Chunks:    {stats.get('total_embedded_chunks')}")
     
     print("\nProviders Used:")
     for prov, count in stats.get("providers_used", {}).items():
@@ -49,7 +49,7 @@ def main():
     embedded_files = list(document_service.EMBEDDED_DIR.glob("**/*_embedded.json"))
     if embedded_files:
         print("\n====================================================")
-        print("🔍 VECTOR EMBEDDING PREVIEW")
+        print("VECTOR EMBEDDING PREVIEW")
         print("====================================================")
         try:
             with open(embedded_files[0], "r", encoding="utf-8") as f:
@@ -59,10 +59,10 @@ def main():
             if chunks:
                 sample = chunks[0]
                 vector = sample.get("embedding", [])
-                print(f"  • Chunk ID:  {sample.get('chunk_id')}")
-                print(f"  • Provider:  {data.get('provider').upper()}")
-                print(f"  • Dimension: {data.get('dimension')} dims")
-                print(f"  • Vector Snippet (First 10 values):")
+                print(f"  * Chunk ID:  {sample.get('chunk_id')}")
+                print(f"  * Provider:  {data.get('provider').upper()}")
+                print(f"  * Dimension: {data.get('dimension')} dims")
+                print(f"  * Vector Snippet (First 10 values):")
                 print(f"    {vector[:10]}")
                 print(f"    (Total elements in vector: {len(vector)})")
         except Exception as e:

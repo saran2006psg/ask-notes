@@ -6,6 +6,8 @@ from fastapi import APIRouter, File, UploadFile, HTTPException, Query
 
 from app.core import config
 from app.services import document_service
+from app.services.vector_store import VectorStoreService
+
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -185,5 +187,34 @@ def get_embedding_stats():
     except Exception as e:
         logger.error(f"Error fetching embedding statistics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/vectorstore/index")
+def index_vectorstore():
+    """
+    Trigger indexing of all cached vector embeddings into local persistent Chroma DB.
+    """
+    try:
+        vs = VectorStoreService()
+        stats = vs.index_embedded_chunks()
+        return {
+            "message": "Chroma DB indexing complete.",
+            "statistics": stats
+        }
+    except Exception as e:
+        logger.error(f"Error indexing vectors in Chroma DB: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/vectorstore/stats")
+def get_vectorstore_stats():
+    """
+    Get statistics about the indexed collection inside Chroma DB.
+    """
+    try:
+        vs = VectorStoreService()
+        return vs.get_stats()
+    except Exception as e:
+        logger.error(f"Error fetching Chroma DB statistics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 

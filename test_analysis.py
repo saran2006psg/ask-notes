@@ -1,4 +1,5 @@
 import os
+
 import sys
 from pathlib import Path
 
@@ -23,29 +24,29 @@ def main():
         return
         
     print("\n====================================================")
-    print("📊 OVERALL DATASET METRICS")
+    print("OVERALL DATASET METRICS")
     print("====================================================")
-    print(f"  • Total Documents:  {overall.get('total_documents')}")
-    print(f"  • Total Pages/Slides: {overall.get('total_pages')}")
-    print(f"  • Total Word Count:  {overall.get('total_words')}")
-    print(f"  • Total Characters:  {overall.get('total_characters')}")
+    print(f"  * Total Documents:  {overall.get('total_documents')}")
+    print(f"  * Total Pages/Slides: {overall.get('total_pages')}")
+    print(f"  * Total Word Count:  {overall.get('total_words')}")
+    print(f"  * Total Characters:  {overall.get('total_characters')}")
     
     print("\nFormats Distribution:")
     for fmt, count in overall.get("formats", {}).items():
         print(f"  - {fmt}: {count} file(s)")
         
     print("\n====================================================")
-    print("📚 SUBJECT-LEVEL BREAKDOWN")
+    print("SUBJECT-LEVEL BREAKDOWN")
     print("====================================================")
     for subject, stats in by_subject.items():
-        print(f"\n📁 Subject: {subject}")
-        print(f"  • Files:      {stats.get('document_count')}")
-        print(f"  • Pages:      {stats.get('total_pages')}")
-        print(f"  • Words:      {stats.get('total_words')}")
-        print(f"  • Characters: {stats.get('total_characters')}")
+        print(f"\nSubject: {subject}")
+        print(f"  * Files:      {stats.get('document_count')}")
+        print(f"  * Pages:      {stats.get('total_pages')}")
+        print(f"  * Words:      {stats.get('total_words')}")
+        print(f"  * Characters: {stats.get('total_characters')}")
         
     print("\n====================================================")
-    print("📄 INDIVIDUAL DOCUMENT BREAKDOWN")
+    print("INDIVIDUAL DOCUMENT BREAKDOWN")
     print("====================================================")
     # Format header
     print(f"{'Filename':<40} | {'Format':<6} | {'Pages':<5} | {'Words':<8} | {'Characters':<10}")

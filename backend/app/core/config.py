@@ -1,9 +1,14 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 # Base project directory (workspace root)
 # Since config.py is at backend/app/core/config.py, the base directory is 3 levels up
 BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
+
+# Load environment variables
+load_dotenv(BASE_DIR / ".env")
+
 
 # Notes directory where PDFs are placed
 NOTES_DIR = BASE_DIR / "notes"
