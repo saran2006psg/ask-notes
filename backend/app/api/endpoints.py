@@ -4,10 +4,17 @@ from typing import List, Optional
 from pathlib import Path
 from fastapi import APIRouter, File, UploadFile, HTTPException, Query
 
+from pydantic import BaseModel
 from app.core import config
 from app.services import document_service
 from app.services.vector_store import VectorStoreService
 from app.services.retrieval_service import RetrievalService
+from app.services.prompt_service import PromptService
+from app.services.llm_service import LLMService
+from app.services.citation_service import CitationService
+
+
+
 
 
 
@@ -240,6 +247,101 @@ def retrieve_context(
         }
     except Exception as e:
         logger.error(f"Error during context retrieval: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class PromptBuildRequest(BaseModel):
+    query: str
+    subject: Optional[str] = None
+    top_k: int = 5
+    rerank: bool = True
+
+@router.post("/prompt/build")
+def build_prompt_endpoint(request: PromptBuildRequest):
+    """
+    Retrieve matching context chunks and assemble a grounded prompt.
+    """
+    try:
+        retriever = RetrievalService()
+        prompter = PromptService()
+        
+        # 1. Retrieve context
+        chunks = retriever.retrieve_context(
+            query=request.query,
+            subject=request.subject,
+            top_k=request.top_k,
+            rerank=request.rerank
+        )
+        
+        # 2. Build grounded prompt
+        prompt = prompter.build_prompt(query=request.query, chunks=chunks)
+        
+        return {
+            "query": request.query,
+            "subject": request.subject,
+            "prompt": prompt
+        }
+    except Exception as e:
+        logger.error(f"Error building prompt: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class ChatRequest(BaseModel):
+    query: str
+    subject: Optional[str] = None
+    top_k: int = 5
+    rerank: bool = True
+
+@router.post("/chat")
+def chat_endpoint(request: ChatRequest):
+    """
+    Run full RAG pipeline: retrieve context, build grounded prompt,
+    generate answer using Groq LLM, and verify citations.
+    """
+    try:
+        retriever = RetrievalService()
+        prompter = PromptService()
+        llm = LLMService()
+        cit_engine = CitationService()
+        
+        # 1. Retrieve context
+        chunks = retriever.retrieve_context(
+            query=request.query,
+            subject=request.subject,
+            top_k=request.top_k,
+            rerank=request.rerank
+        )
+        
+        # 2. Build grounded prompt
+        prompt = prompter.build_prompt(query=request.query, chunks=chunks)
+        
+        # 3. Generate LLM answer
+        answer = llm.generate_answer(prompt=prompt)
+        
+        # 4. Extract and verify citations actually cited in response
+        verified_citations = cit_engine.citation_engine(answer=answer, retrieved_chunks=chunks)
+        
+        # Format clean retrieved context citations structure
+        retrieved_citations = []
+        for idx, chunk in enumerate(chunks):
+            meta = chunk.get("metadata", {})
+            retrieved_citations.append({
+                "index": idx + 1,
+                "chunk_id": chunk.get("chunk_id"),
+                "score": chunk.get("score"),
+                "filename": meta.get("filename"),
+                "subject": meta.get("subject"),
+                "page": meta.get("page"),
+                "source": meta.get("source")
+            })
+            
+        return {
+            "query": request.query,
+            "subject": request.subject,
+            "answer": answer,
+            "verified_citations": verified_citations,
+            "retrieved_citations": retrieved_citations
+        }
+    except Exception as e:
+        logger.error(f"Error in RAG chat pipeline: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
