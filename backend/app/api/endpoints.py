@@ -152,3 +152,38 @@ def get_chunk_stats():
         logger.error(f"Error fetching chunk statistics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/ingest/embed")
+def embed_documents():
+    """
+    Trigger vector embedding generation for all chunked documents.
+    """
+    try:
+        results = document_service.generate_embeddings()
+        success_count = sum(1 for r in results if r["status"] == "embedded")
+        failed_count = sum(1 for r in results if r["status"] == "failed")
+        
+        return {
+            "message": "Vector embedding generation completed.",
+            "statistics": {
+                "total_documents": len(results),
+                "successfully_embedded": success_count,
+                "failed": failed_count
+            },
+            "details": results
+        }
+    except Exception as e:
+        logger.error(f"Error generating embeddings: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/documents/embeddings")
+def get_embedding_stats():
+    """
+    Get statistics about generated vector embeddings.
+    """
+    try:
+        return document_service.get_embedding_statistics()
+    except Exception as e:
+        logger.error(f"Error fetching embedding statistics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+

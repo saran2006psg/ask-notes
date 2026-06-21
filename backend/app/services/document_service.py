@@ -409,4 +409,130 @@ def get_chunk_statistics() -> Dict[str, Any]:
         
     return stats
 
+# Path for embedded storage
+EMBEDDED_DIR = config.DATA_DIR / "embedded"
+
+def generate_embeddings() -> List[Dict[str, Any]]:
+    """
+    Load chunk JSON files, pass text to EmbeddingService,
+    save embedded chunks in data/embedded/{subject}/, and return results.
+    """
+    from app.services.embedding_service import EmbeddingService
+    
+    results = []
+    EMBEDDED_DIR.mkdir(parents=True, exist_ok=True)
+    
+    if not CHUNKS_DIR.exists():
+        logger.warning("Chunks directory does not exist. Please chunk files first.")
+        return results
+        
+    chunk_files = list(CHUNKS_DIR.glob("**/*_chunks.json"))
+    logger.info(f"Found {len(chunk_files)} chunk files to embed.")
+    
+    embedder = EmbeddingService()
+    
+    for f_path in chunk_files:
+        try:
+            with open(f_path, "r", encoding="utf-8") as f:
+                chunk_data = json.load(f)
+                
+            filename = chunk_data.get("filename")
+            subject = chunk_data.get("subject", "General")
+            fmt = chunk_data.get("format", "UNKNOWN")
+            chunks = chunk_data.get("chunks", [])
+            
+            if not chunks:
+                results.append({
+                    "filename": filename,
+                    "subject": subject,
+                    "status": "skipped",
+                    "reason": "No chunks found in document."
+                })
+                continue
+                
+            # Extract texts
+            texts = [c["text"] for c in chunks]
+            
+            # Batch embedding call
+            vectors = embedder.embed_texts(texts)
+            
+            # Inject vectors
+            embedded_chunks = []
+            for idx, chunk in enumerate(chunks):
+                chunk["embedding"] = vectors[idx]
+                embedded_chunks.append(chunk)
+                
+            embedded_payload = {
+                "filename": filename,
+                "subject": subject,
+                "format": fmt,
+                "provider": embedder.provider,
+                "dimension": embedder.dimension,
+                "total_chunks": len(embedded_chunks),
+                "chunks": embedded_chunks
+            }
+            
+            # Save file in data/embedded/{subject}/
+            dest_dir = EMBEDDED_DIR / subject
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest_path = dest_dir / f"{Path(filename).stem}_embedded.json"
+            
+            with open(dest_path, "w", encoding="utf-8") as f:
+                json.dump(embedded_payload, f, indent=2, ensure_ascii=False)
+                
+            results.append({
+                "filename": filename,
+                "subject": subject,
+                "total_chunks": len(embedded_chunks),
+                "provider": embedder.provider,
+                "dimension": embedder.dimension,
+                "status": "embedded",
+                "dest_path": str(dest_path)
+            })
+            logger.info(f"Successfully embedded {filename} | {len(embedded_chunks)} chunks using {embedder.provider}")
+            
+        except Exception as e:
+            logger.error(f"Failed to generate embeddings for {f_path.name}: {e}")
+            results.append({
+                "filename": f_path.name,
+                "status": "failed",
+                "error": str(e)
+            })
+            
+    return results
+
+def get_embedding_statistics() -> Dict[str, Any]:
+    """
+    Returns statistics about the generated embeddings.
+    """
+    stats = {
+        "total_embedded_documents": 0,
+        "total_embedded_chunks": 0,
+        "providers_used": {},
+        "by_subject": {}
+    }
+    
+    if not EMBEDDED_DIR.exists():
+        return stats
+        
+    embedded_files = list(EMBEDDED_DIR.glob("**/*_embedded.json"))
+    stats["total_embedded_documents"] = len(embedded_files)
+    
+    for f in embedded_files:
+        try:
+            with open(f, "r", encoding="utf-8") as file:
+                data = json.load(file)
+            count = data.get("total_chunks", 0)
+            subject = data.get("subject", "General")
+            provider = data.get("provider", "UNKNOWN")
+            
+            stats["total_embedded_chunks"] += count
+            stats["providers_used"][provider] = stats["providers_used"].get(provider, 0) + 1
+            stats["by_subject"][subject] = stats["by_subject"].get(subject, 0) + count
+        except Exception:
+            pass
+            
+    return stats
+
+
 
