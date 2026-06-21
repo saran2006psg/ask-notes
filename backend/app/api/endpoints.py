@@ -26,6 +26,18 @@ def list_documents():
         logger.error(f"Error listing documents: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/documents/analysis")
+def get_document_analysis():
+    """
+    Get aggregated dataset analytics (files, pages, words, characters)
+    overall, by subject, and per file.
+    """
+    try:
+        return document_service.analyze_documents()
+    except Exception as e:
+        logger.error(f"Error compiling document analysis: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/ingest/upload")
 async def upload_files(
     files: List[UploadFile] = File(...),

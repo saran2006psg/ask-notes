@@ -188,6 +188,87 @@ def get_all_documents() -> List[Dict[str, Any]]:
             except Exception:
                 pass
                 
-        documents.append(doc_info)
-        
     return documents
+
+def analyze_documents() -> Dict[str, Any]:
+    """
+    Analyzes the extracted JSON files and returns dataset statistics:
+    - Overall statistics: total documents, total pages, total words, total characters, formats.
+    - Subject-level breakdown: documents, pages, words, characters per subject.
+    - Document-level breakdown: details for each file.
+    """
+    analysis = {
+        "overall": {
+            "total_documents": 0,
+            "total_pages": 0,
+            "total_words": 0,
+            "total_characters": 0,
+            "formats": {}
+        },
+        "by_subject": {},
+        "by_document": []
+    }
+    
+    if not config.EXTRACTED_DIR.exists():
+        return analysis
+        
+    # Recursively find all generated JSON files in the extracted directory
+    json_files = list(config.EXTRACTED_DIR.glob("**/*.json"))
+    
+    for json_path in json_files:
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                doc_data = json.load(f)
+                
+            filename = doc_data.get("filename")
+            subject = doc_data.get("subject", "General")
+            fmt = doc_data.get("format", "UNKNOWN")
+            pages = doc_data.get("pages", [])
+            total_pages = len(pages)
+            
+            # Calculate counts
+            doc_words = 0
+            doc_chars = 0
+            for page in pages:
+                text = page.get("text", "")
+                doc_words += len(text.split())
+                doc_chars += len(text)
+                
+            # Document entry
+            doc_entry = {
+                "filename": filename,
+                "subject": subject,
+                "format": fmt,
+                "pages": total_pages,
+                "words": doc_words,
+                "characters": doc_chars
+            }
+            analysis["by_document"].append(doc_entry)
+            
+            # Accumulate overall stats
+            analysis["overall"]["total_documents"] += 1
+            analysis["overall"]["total_pages"] += total_pages
+            analysis["overall"]["total_words"] += doc_words
+            analysis["overall"]["total_characters"] += doc_chars
+            
+            # Format count
+            analysis["overall"]["formats"][fmt] = analysis["overall"]["formats"].get(fmt, 0) + 1
+            
+            # Accumulate subject stats
+            if subject not in analysis["by_subject"]:
+                analysis["by_subject"][subject] = {
+                    "document_count": 0,
+                    "total_pages": 0,
+                    "total_words": 0,
+                    "total_characters": 0
+                }
+            analysis["by_subject"][subject]["document_count"] += 1
+            analysis["by_subject"][subject]["total_pages"] += total_pages
+            analysis["by_subject"][subject]["total_words"] += doc_words
+            analysis["by_subject"][subject]["total_characters"] += doc_chars
+            
+        except Exception as e:
+            logger.error(f"Error analyzing document at {json_path}: {e}")
+            
+    return analysis
+
