@@ -11,16 +11,24 @@ interface Citation {
   text?: string;
 }
 
+interface ChatImage {
+  path: string;
+  description: string;
+  url: string;
+}
+
 interface Message {
   role: 'user' | 'assistant';
   content: string;
   citations?: Citation[];
+  images?: ChatImage[];
 }
 
 interface ChatMessageBubbleProps {
   msg: Message;
   isUser: boolean;
   onCitationClick: (cit: Citation) => void;
+  onImageClick: (img: ChatImage) => void;
   formatMessageContent: (content: string) => string;
 }
 
@@ -28,6 +36,7 @@ const ChatMessageBubble: React.FC<ChatMessageBubbleProps> = ({
   msg,
   isUser,
   onCitationClick,
+  onImageClick,
   formatMessageContent
 }) => {
   const [showCitations, setShowCitations] = useState(false);
@@ -68,6 +77,39 @@ const ChatMessageBubble: React.FC<ChatMessageBubbleProps> = ({
         }}>
           {isUser ? msg.content : formatMessageContent(msg.content)}
         </div>
+
+        {/* Render images if any */}
+        {!isUser && msg.images && msg.images.length > 0 && (
+          <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {msg.images.map((img, idx) => (
+              <div 
+                key={idx} 
+                className="glass-card" 
+                style={{ 
+                  padding: '8px', 
+                  background: 'rgba(0,0,0,0.2)',
+                  cursor: 'pointer',
+                  border: '1px solid rgba(255,255,255,0.05)',
+                  transition: 'border-color 0.2s',
+                }}
+                onClick={() => onImageClick(img)}
+                onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--accent-cyan)')}
+                onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)')}
+              >
+                <img 
+                  src={img.url} 
+                  alt="Extracted context" 
+                  style={{ width: '100%', maxHeight: '200px', objectFit: 'contain', borderRadius: '4px' }}
+                />
+                {img.description && (
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '8px', fontStyle: 'italic' }}>
+                    {img.description}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Render verified inline citations list */}
         {!isUser && msg.citations && msg.citations.length > 0 && (
@@ -161,6 +203,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
 }) => {
   const [input, setInput] = useState<string>("");
   const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null);
+  const [selectedImage, setSelectedImage] = useState<ChatImage | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -232,6 +275,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
               msg={msg}
               isUser={msg.role === 'user'}
               onCitationClick={handleCitationClick}
+              onImageClick={(img) => setSelectedImage(img)}
               formatMessageContent={formatMessageContent}
             />
           ))
@@ -316,6 +360,56 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Image Lightbox (Overlay modal) */}
+      {selectedImage && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          background: 'rgba(0,0,0,0.8)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 20
+        }}>
+          <button 
+            onClick={() => setSelectedImage(null)}
+            style={{
+              position: 'absolute',
+              top: '24px',
+              right: '24px',
+              background: 'var(--glass-bg)',
+              border: '1px solid var(--glass-border)',
+              borderRadius: '50%',
+              padding: '8px',
+              cursor: 'pointer',
+              color: '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <X style={{ width: '24px', height: '24px' }} />
+          </button>
+          <img 
+            src={selectedImage.url} 
+            alt="Expanded context" 
+            style={{ maxWidth: '90%', maxHeight: '70vh', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
+          />
+          {selectedImage.description && (
+            <div className="glass-panel" style={{ marginTop: '20px', maxWidth: '80%', padding: '16px 24px', textAlign: 'center' }}>
+              <p style={{ fontSize: '13px', color: 'var(--text-primary)', lineHeight: '1.6' }}>
+                {selectedImage.description}
+              </p>
+            </div>
+          )}
         </div>
       )}
 

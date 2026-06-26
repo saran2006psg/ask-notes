@@ -45,6 +45,20 @@ def get_subject_for_file(file_path: Path, user_id: Optional[str] = None) -> str:
     except Exception:
         return classify_subject(file_path.name)
 
+def get_images_dir_for_file(file_path: Path, subject: str, user_id: Optional[str] = None) -> Path:
+    """
+    Get the directory where extracted images for a specific document are stored.
+    Structure: data/images/{user_id}/{subject}/{filename_stem}/
+    """
+    stem = file_path.stem
+    if user_id:
+        images_dir = config.IMAGES_DIR / user_id / subject / stem
+    else:
+        images_dir = config.IMAGES_DIR / subject / stem
+    images_dir.mkdir(parents=True, exist_ok=True)
+    return images_dir
+
+
 def get_extracted_path(file_path: Path, subject: str, user_id: Optional[str] = None) -> Path:
     """
     Get the path where the extracted JSON file should be saved.
@@ -118,15 +132,28 @@ def load_documents(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
                 })
                 continue
                 
-            # Perform text extraction based on file extension
+            # Perform text + image extraction based on file extension
+            images_dir = get_images_dir_for_file(file_path, subject, user_id)
             if ext == ".pdf":
-                extracted_data = extract_pdf_data(file_path)
+                extracted_data = extract_pdf_data(file_path, images_dir=images_dir)
             elif ext == ".pptx":
-                extracted_data = extract_pptx_data(file_path)
+                extracted_data = extract_pptx_data(file_path, images_dir=images_dir)
             elif ext == ".docx":
-                extracted_data = extract_docx_data(file_path)
+                extracted_data = extract_docx_data(file_path, images_dir=images_dir)
             else:
                 raise ValueError(f"Unsupported format: {ext}")
+
+            # Describe extracted images with Gemini Vision
+            try:
+                from app.services.image_description_service import ImageDescriptionService
+                img_describer = ImageDescriptionService()
+                for page in extracted_data["pages"]:
+                    for img_info in page.get("images", []):
+                        img_path = Path(img_info["path"])
+                        description = img_describer.describe_image(img_path)
+                        img_info["description"] = description or ""
+            except Exception as e:
+                logger.warning(f"Image description step failed for {filename}: {e}")
                 
             # Enrich with metadata
             document_payload = {
@@ -348,18 +375,23 @@ def create_chunks(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
             for page in pages:
                 page_num = page.get("page_number", 1)
                 text = page.get("text", "").strip()
+                # Collect image info from this page
+                page_images = page.get("images", [])
+                page_image_paths = [img["path"] for img in page_images if img.get("path")]
+                page_image_descriptions = [img.get("description", "") for img in page_images if img.get("path")]
+
                 if not text:
                     continue
-                    
+
                 # Split text semantically
                 page_chunks = chunker.chunk_text(text)
-                
+
                 for chunk_text in page_chunks:
                     # Formulate chunk ID prefix including user_id
                     uid_prefix = f"{user_id}_" if user_id else ""
                     chunk_id = f"{uid_prefix}{subject}_{clean_filename_id}_chunk_{chunk_idx}"
                     chunk_id = re.sub(r'[^\w\-]', '', chunk_id)
-                    
+
                     doc_chunks.append({
                         "chunk_id": chunk_id,
                         "text": chunk_text,
@@ -368,7 +400,9 @@ def create_chunks(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
                             "subject": subject,
                             "format": fmt,
                             "page": page_num,
-                            "source": f"{subject} Notes - Page {page_num}"
+                            "source": f"{subject} Notes - Page {page_num}",
+                            "image_paths": page_image_paths,
+                            "image_descriptions": page_image_descriptions
                         }
                     })
                     chunk_idx += 1

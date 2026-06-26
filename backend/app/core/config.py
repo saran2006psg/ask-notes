@@ -17,10 +17,16 @@ NOTES_DIR = BASE_DIR / "notes"
 DATA_DIR = BASE_DIR / "data"
 EXTRACTED_DIR = DATA_DIR / "extracted"
 
+# Images directory where extracted images from documents are stored
+IMAGES_DIR = DATA_DIR / "images"
+
 # Ensure directories exist
 NOTES_DIR.mkdir(parents=True, exist_ok=True)
 EXTRACTED_DIR.mkdir(parents=True, exist_ok=True)
+IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 
 print(f"[Config] Project BASE_DIR: {BASE_DIR}")
 print(f"[Config] NOTES_DIR: {NOTES_DIR}")
 print(f"[Config] EXTRACTED_DIR: {EXTRACTED_DIR}")
+print(f"[Config] IMAGES_DIR: {IMAGES_DIR}")
+

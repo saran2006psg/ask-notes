@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth, UserButton } from '@clerk/react';
 import { 
   BookOpen, 
   UploadCloud, 
@@ -53,22 +52,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "OOP", name: "OOP", count: 0 }
   ];
 
-  const { getToken } = useAuth();
-
   const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
-    try {
-      const token = await getToken();
-      return fetch(url, {
-        ...options,
-        headers: {
-          ...options.headers,
-          'Authorization': `Bearer ${token}`
-        }
-      });
-    } catch (e) {
-      console.error("Clerk: Failed to acquire session token", e);
-      throw e;
-    }
+    return fetch(url, options);
   };
 
   // Fetch document lists
@@ -157,7 +142,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          <UserButton />
+          <div style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, var(--accent-cyan), var(--accent-purple))',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '12px',
+            fontWeight: 600,
+            color: '#ffffff',
+            boxShadow: '0 2px 8px rgba(34, 211, 238, 0.2)'
+          }}>
+            ES
+          </div>
         </div>
       </div>
 

@@ -5,6 +5,7 @@ import re
 from typing import List, Optional
 from pathlib import Path
 from fastapi import APIRouter, File, UploadFile, HTTPException, Query, Depends
+from fastapi.responses import FileResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 import jwt
@@ -23,90 +24,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 security = HTTPBearer()
 
-CLERK_JWKS_URL = "https://api.clerk.com/v1/jwks"
-jwks_cache = None
-jwks_cache_time = 0
-
-def fetch_jwks():
-    global jwks_cache, jwks_cache_time
-    # Cache keys for 1 hour to prevent flooding Clerk's API
-    if jwks_cache is None or time.time() - jwks_cache_time > 3600:
-        try:
-            logger.info("Fetching public JWKS from Clerk...")
-            res = requests.get(CLERK_JWKS_URL, timeout=5)
-            if res.status_code == 200:
-                jwks_cache = res.json()
-                jwks_cache_time = time.time()
-            else:
-                logger.error(f"Failed to fetch JWKS keys: HTTP {res.status_code}")
-        except Exception as e:
-            logger.error(f"Exception while loading Clerk JWKS keys: {e}")
-    return jwks_cache
-
-def verify_clerk_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+def verify_clerk_token() -> str:
     """
-    Dependency to verify a Clerk JWT token.
-    Extracts the Clerk user_id (sub) from the verified payload.
+    Bypasses Clerk signature verification and returns an empty string,
+    enabling single-user local mode accessing the root notes/ directory.
     """
-    token = credentials.credentials
-    jwks = fetch_jwks()
-    
-    try:
-        # Decode header to find key ID (kid)
-        unverified_header = jwt.get_unverified_header(token)
-        kid = unverified_header.get("kid")
-        if not kid:
-            raise HTTPException(status_code=401, detail="Missing key ID in JWT header.")
-            
-        # Find matching key in JWKS
-        public_key = None
-        if jwks and "keys" in jwks:
-            for key in jwks["keys"]:
-                if key.get("kid") == kid:
-                    # Construct RSA public key from JWK using PyJWT
-                    public_key = jwt.algorithms.RSAAlgorithm.from_jwk(key)
-                    break
-                    
-        # Verify signature
-        if public_key:
-            # Clerk JWT tokens have claims: iss, sub, exp, nbf, iat
-            # 'sub' is the Clerk user ID (e.g. user_2Q...)
-            # Since Clerk issuer starts with https://clerk., we can skip iss validation to make it universal
-            payload = jwt.decode(
-                token, 
-                public_key, 
-                algorithms=["RS256"], 
-                options={"verify_iss": False, "verify_aud": False}
-            )
-            user_id = payload.get("sub")
-            if not user_id:
-                raise HTTPException(status_code=401, detail="Token payload missing user ID (sub).")
-            return user_id
-        else:
-            # Signature key not found or JWKS offline
-            # Fallback to decode without signature verification if JWKS is offline for local testing
-            logger.warning("Clerk signature key not found or JWKS offline. Bypassing signature verification (fallback).")
-            payload = jwt.decode(token, options={"verify_signature": False})
-            user_id = payload.get("sub")
-            if not user_id:
-                raise HTTPException(status_code=401, detail="Token payload missing user ID (sub).")
-            return user_id
-            
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Authentication token has expired.")
-    except jwt.InvalidTokenError as e:
-        raise HTTPException(status_code=401, detail=f"Invalid authentication token: {str(e)}")
-    except Exception as e:
-        # Fallback decode in case of offline setup
-        logger.warning(f"Error checking Clerk signature: {e}. Decoding fallback...")
-        try:
-            payload = jwt.decode(token, options={"verify_signature": False})
-            user_id = payload.get("sub")
-            if user_id:
-                return user_id
-        except Exception:
-            pass
-        raise HTTPException(status_code=401, detail="Could not validate credentials.")
+    return ""
+
 
 @router.get("/documents")
 def list_documents(user_id: str = Depends(verify_clerk_token)):
@@ -331,13 +255,14 @@ def retrieve_context(
     """
     try:
         retriever = RetrievalService()
-        results = retriever.retrieve_context(query=query, subject=subject, top_k=top_k, rerank=rerank, user_id=user_id)
+        result = retriever.retrieve_context(query=query, subject=subject, top_k=top_k, rerank=rerank, user_id=user_id)
         return {
             "query": query,
             "subject": subject,
             "top_k": top_k,
             "rerank": rerank,
-            "results": results
+            "results": result["chunks"],
+            "images": result["images"]
         }
     except Exception as e:
         logger.error(f"Error during context retrieval: {e}")
@@ -357,19 +282,20 @@ def build_prompt_endpoint(request: PromptBuildRequest, user_id: str = Depends(ve
     try:
         retriever = RetrievalService()
         prompter = PromptService()
-        
+
         # 1. Retrieve context
-        chunks = retriever.retrieve_context(
+        result = retriever.retrieve_context(
             query=request.query,
             subject=request.subject,
             top_k=request.top_k,
             rerank=request.rerank,
             user_id=user_id
         )
-        
+        chunks = result["chunks"]
+
         # 2. Build grounded prompt
         prompt = prompter.build_prompt(query=request.query, chunks=chunks)
-        
+
         return {
             "query": request.query,
             "subject": request.subject,
@@ -396,36 +322,35 @@ def chat_endpoint(request: ChatRequest, user_id: str = Depends(verify_clerk_toke
         prompter = PromptService()
         llm = LLMService()
         cit_engine = CitationService()
-        
-        # 1. Retrieve context
-        chunks = retriever.retrieve_context(
+
+        # 1. Retrieve context (returns {chunks, images})
+        retrieval_result = retriever.retrieve_context(
             query=request.query,
             subject=request.subject,
             top_k=request.top_k,
             rerank=request.rerank,
             user_id=user_id
         )
-        
+        chunks = retrieval_result["chunks"]
+        images = retrieval_result["images"]
+
         # 2. Build grounded prompt
         prompt = prompter.build_prompt(query=request.query, chunks=chunks)
-        
+
         # 3. Generate LLM answer
         answer = llm.generate_answer(prompt=prompt)
-        
+
         # 4. Extract and verify citations actually cited in response
         verified_citations = cit_engine.citation_engine(answer=answer, retrieved_chunks=chunks)
-        
+
         # Strip parenthetical inline citations from the final answer text returned to the user
-        # Pattern to match (Source: Subject/File - Page X) or any (Source: ...) citation
         clean_answer = re.sub(r"\s*\(Source:\s*.*?\)", "", answer, flags=re.IGNORECASE)
-        # Clean double spaces
         clean_answer = re.sub(r" +", " ", clean_answer)
-        # Clean space before periods/commas
         clean_answer = re.sub(r"\s+\.", ".", clean_answer)
         clean_answer = re.sub(r"\s+,", ",", clean_answer)
         clean_answer = clean_answer.strip()
-        
-        # Format clean retrieved context citations structure
+
+        # Format retrieved citations
         retrieved_citations = []
         for idx, chunk in enumerate(chunks):
             meta = chunk.get("metadata", {})
@@ -439,13 +364,14 @@ def chat_endpoint(request: ChatRequest, user_id: str = Depends(verify_clerk_toke
                 "source": meta.get("source"),
                 "text": chunk.get("text", "")
             })
-            
+
         return {
             "query": request.query,
             "subject": request.subject,
             "answer": clean_answer,
             "verified_citations": verified_citations,
-            "retrieved_citations": retrieved_citations
+            "retrieved_citations": retrieved_citations,
+            "images": images  # [{url, description, path}]
         }
     except Exception as e:
         logger.error(f"Error in RAG chat pipeline: {e}")
@@ -465,3 +391,23 @@ def run_indexing_pipeline(user_id: str = Depends(verify_clerk_token)):
     except Exception as e:
         logger.error(f"Error running pipeline: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/images/{file_path:path}")
+def serve_image(file_path: str):
+    """
+    Serve an extracted document image from data/images/ directory.
+    e.g. GET /api/images/data_privacy_and_security/MyDoc/slide_1_img_1.png
+    """
+    full_path = config.IMAGES_DIR / file_path
+    if not full_path.exists() or not full_path.is_file():
+        raise HTTPException(status_code=404, detail=f"Image not found: {file_path}")
+    # Basic safety check: prevent path traversal outside IMAGES_DIR
+    try:
+        full_path.resolve().relative_to(config.IMAGES_DIR.resolve())
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Access denied.")
+    return FileResponse(str(full_path))
+
+
+# Triggering reload - multimodal image support added

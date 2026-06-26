@@ -15,16 +15,20 @@ class PromptService:
             "by the text.\n"
             "3. Citations: Every fact or claim you make must cite the source note document and page number. "
             "Format citations inline, for example: (Source: DBMS Notes - Page 12) or at the end of statements.\n"
-            "4. Formatting: Keep your answers clear, educational, and structured."
+            "4. Images: If a context segment includes an image description, reference it in your answer where "
+            "relevant (e.g., 'As shown in the diagram: [key detail from description]'). "
+            "Do not fabricate image contents beyond what is described.\n"
+            "5. Formatting: Keep your answers clear, educational, and structured."
         )
 
     def build_prompt(self, query: str, chunks: List[Dict[str, Any]]) -> str:
         """
-        Formats retrieved segments and user query into a grounded RAG prompt.
+        Formats retrieved segments (with optional image descriptions) and user query
+        into a grounded RAG prompt.
         
         Args:
             query (str): User's search query or question.
-            chunks (List[Dict[str, Any]]): Retrieved chunks with metadata.
+            chunks (List[Dict[str, Any]]): Retrieved chunks with metadata and image info.
             
         Returns:
             str: Grounded prompt template.
@@ -46,6 +50,13 @@ class PromptService:
                 context_str += f"Segment [{idx + 1}]:\n"
                 context_str += f"Source: {source}\n"
                 context_str += f"Content:\n{text}\n"
+
+                # Append image descriptions if present
+                image_descriptions = chunk.get("image_descriptions", [])
+                for desc_idx, desc in enumerate(image_descriptions):
+                    if desc and desc.strip():
+                        context_str += f"[Image {desc_idx + 1} on this page: {desc.strip()}]\n"
+
                 context_str += "-" * 50 + "\n"
 
         # 2. Assemble RAG Prompt

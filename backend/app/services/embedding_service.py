@@ -18,8 +18,8 @@ class EmbeddingService:
                 import google.generativeai as genai
                 genai.configure(api_key=api_key)
                 self.provider = "gemini"
-                self.dimension = 768
-                logger.info("Embedding Service: Successfully initialized Gemini API (text-embedding-004)")
+                self.dimension = 1024
+                logger.info("Embedding Service: Successfully initialized Gemini API (gemini-embedding-001, 1024-dim)")
                 return
             except ImportError:
                 logger.warning("Gemini API key is configured, but 'google-generativeai' package is not installed.")
@@ -52,11 +52,17 @@ class EmbeddingService:
             import google.generativeai as genai
             try:
                 response = genai.embed_content(
-                    model="models/text-embedding-004",
+                    model="models/gemini-embedding-001",
                     content=texts,
-                    task_type="retrieval_document"
+                    task_type="retrieval_document",
+                    output_dimensionality=1024
                 )
-                return response["embedding"]
+                # embed_content returns a list when given a list
+                embs = response["embedding"]
+                # Handle both single and batch responses
+                if embs and isinstance(embs[0], float):
+                    return [embs]  # single text was passed
+                return embs
             except Exception as e:
                 logger.error(f"Gemini API embedding failed: {e}. Falling back to local/mock.")
                 
@@ -85,6 +91,28 @@ class EmbeddingService:
         
     def embed_text(self, text: str) -> List[float]:
         """
-        Embed a single string.
+        Embed a single string for document indexing.
         """
         return self.embed_texts([text])[0]
+
+    def embed_query(self, query: str) -> List[float]:
+        """
+        Embed a query string using retrieval_query task_type for better semantic matching.
+        """
+        if self.provider == "gemini":
+            import google.generativeai as genai
+            try:
+                response = genai.embed_content(
+                    model="models/gemini-embedding-001",
+                    content=query,
+                    task_type="retrieval_query",
+                    output_dimensionality=1024
+                )
+                embs = response["embedding"]
+                if embs and isinstance(embs[0], float):
+                    return embs
+                return embs[0]
+            except Exception as e:
+                logger.error(f"Gemini query embedding failed: {e}. Falling back to embed_text.")
+        # Fallback: use standard embed_texts
+        return self.embed_texts([query])[0]

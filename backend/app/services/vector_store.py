@@ -179,7 +179,16 @@ class VectorStoreService:
                     # because Pinecone only stores IDs and vectors.
                     meta = chunk["metadata"].copy()
                     meta["text"] = chunk["text"]
-                    meta["user_id"] = user_id or "global"
+                    if user_id:  # Only tag user_id when explicitly set
+                        meta["user_id"] = user_id
+
+                    # Serialize image_paths as JSON string (Pinecone metadata only supports scalars)
+                    image_paths = meta.pop("image_paths", []) or []
+                    image_descriptions = meta.pop("image_descriptions", []) or []
+                    if image_paths:
+                        meta["image_paths_json"] = json.dumps(image_paths)
+                    if image_descriptions:
+                        meta["image_descriptions_json"] = json.dumps(image_descriptions)
                     
                     # Pad/truncate vector if index dimension mismatches chunk embedding dimension
                     raw_emb = chunk["embedding"]
@@ -244,7 +253,8 @@ class VectorStoreService:
                     
             # Formulate query filter if subject or user_id is provided
             query_filter = {}
-            query_filter["user_id"] = user_id or "global"
+            if user_id:  # Only filter by user_id when explicitly set
+                query_filter["user_id"] = user_id
             if subject:
                 query_filter["subject"] = subject
                 
@@ -262,12 +272,20 @@ class VectorStoreService:
                 metadata = m.get("metadata", {})
                 # Extract text out from metadata
                 text = metadata.pop("text", "")
-                
+
+                # Deserialize image_paths and image_descriptions from JSON strings
+                image_paths_json = metadata.pop("image_paths_json", None)
+                image_descriptions_json = metadata.pop("image_descriptions_json", None)
+                image_paths = json.loads(image_paths_json) if image_paths_json else []
+                image_descriptions = json.loads(image_descriptions_json) if image_descriptions_json else []
+
                 formatted_results.append({
                     "chunk_id": m.get("id"),
                     "text": text,
                     "score": round(m.get("score", 0.0), 4),
-                    "metadata": metadata
+                    "metadata": metadata,
+                    "image_paths": image_paths,
+                    "image_descriptions": image_descriptions
                 })
                 
             return formatted_results

@@ -20,25 +20,20 @@ class RetrievalService:
         top_k: int = 5,
         rerank: bool = True,
         user_id: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         """
         Retrieves matching document chunks for a given query, optionally filtered by subject.
         
-        Args:
-            query (str): The natural language query.
-            subject (str, optional): The subject category to filter by (e.g. 'DBMS', 'OS').
-            top_k (int): Number of context chunks to retrieve.
-            rerank (bool): Whether to use BGE reranker to refine results.
-            user_id (str, optional): The user identifier to restrict query matching scope.
-            
         Returns:
-            List[Dict[str, Any]]: List of matching chunks with text, scores, and metadata.
+            Dict with keys:
+              - "chunks": List of matching chunk dicts (text, score, metadata)
+              - "images": List of unique image dicts [{path, description, url}] from all matched chunks
         """
         logger.info(f"Retrieval Request: query='{query}' | subject={subject} | top_k={top_k} | rerank={rerank} | user_id={user_id}")
         
         try:
-            # 1. Embed query
-            query_vector = self.embedder.embed_text(query)
+            # 1. Embed query using retrieval_query task_type for better matching
+            query_vector = self.embedder.embed_query(query)
             
             # 2. Similarity search in Pinecone
             # If reranking is enabled, retrieve a larger pool of candidate chunks first
@@ -58,8 +53,32 @@ class RetrievalService:
                 logger.info(f"Applying cross-encoder reranking to return top {top_k} results...")
                 matches = self.reranker.rerank(query=query, chunks=matches, top_k=top_k)
                 
-            return matches[:top_k]
+            chunks = matches[:top_k]
+
+            # 4. Collect unique images from all matched chunks
+            seen_paths = set()
+            images = []
+            for chunk in chunks:
+                chunk_paths = chunk.get("image_paths", [])
+                chunk_descs = chunk.get("image_descriptions", [])
+                for i, path in enumerate(chunk_paths):
+                    if path and path not in seen_paths:
+                        seen_paths.add(path)
+                        desc = chunk_descs[i] if i < len(chunk_descs) else ""
+                        # Build a relative URL for the frontend to fetch
+                        from pathlib import Path as _Path
+                        from app.core import config as _cfg
+                        try:
+                            rel = _Path(path).relative_to(_cfg.IMAGES_DIR)
+                            url = f"/api/images/{rel.as_posix()}"
+                        except ValueError:
+                            url = f"/api/images/{_Path(path).name}"
+                        images.append({"path": path, "description": desc, "url": url})
+
+            logger.info(f"Returning {len(chunks)} chunks and {len(images)} unique image(s).")
+            return {"chunks": chunks, "images": images}
             
         except Exception as e:
             logger.error(f"Failed to retrieve context: {e}")
-            return []
+            return {"chunks": [], "images": []}
+

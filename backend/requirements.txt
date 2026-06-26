@@ -12,5 +12,7 @@ groq==0.9.0
 pyjwt==2.8.0
 cryptography==42.0.5
 requests==2.31.0
-
-
+paddleocr>=2.7.0
+paddlepaddle>=2.5.0
+Pillow>=10.0.0
+pdf2image>=1.16.0
